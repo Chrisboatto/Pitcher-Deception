@@ -94,27 +94,24 @@ Pitch_test <- MLBPitcher[-PitchTrain,]
 ```
 
 ```{r}
-PitchBaseModel <- rpart(launch_speed ~ ., data = Pitch_train, method = 'class')
+attach(MLBPitcher)
+PitchModel <- rpart(launch_speed ~ spin_rate + velocity + release_extension + eff_min_vel + effective_speed, data = Pitch_train, method = 'class')
 ```
 
 ```{r}
-baseImp <- varImp(model)
+baseImp <- varImp(PitchModel)
 baseImp
 
 baseImp <- as.data.frame(baseImp)
 ggplot(baseImp, aes(Overall, row.names(baseImp))) + 
   geom_bar(stat = "identity", width = 0.1, fill = "black") + 
   geom_point(shape = 21, size = 3, colour = "black", fill = "green", stroke = 2) + 
-  labs(title = "ERA Importance", x = "Importance", y = "Variable")
+  labs(title = "Deception Importance", x = "Importance", y = "Variable")
 ```
 
 ```{r}
-PitchNewModel <- rpart(launch_speed ~ velocity + effective_speed + release_extension + spin_rate, data = Pitch_train, method = 'class')
-```
-
-```{r}
-DeceptionTrain <- predict(PitchNewModel, Pitch_train, type = 'vector')
-DeceptionTest <- predict(PitchNewModel, Pitch_test, type = "vector")
+DeceptionTrain <- predict(PitchModel, Pitch_train, type = 'vector')
+DeceptionTest <- predict(PitchModel, Pitch_test, type = "vector")
 ```
 
 ```{r}
