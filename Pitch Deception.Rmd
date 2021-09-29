@@ -1,0 +1,129 @@
+---
+title: "Pitcher Deception"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# Packages Needed
+require(dplyr)
+require(rpart)
+require(ggplot2)
+require(corrplot)
+library(dplyr)
+library(rpart)
+library(ggplot2)
+library(corrplot)
+```
+
+```{r}
+url2021 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2021_MLB.csv"
+url2020 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2020_MLB.csv"
+url2019 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2019_MLB.csv"
+url2018 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2018_MLB.csv"
+url2017 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2017_MLB.csv"
+```
+
+```{r}
+MLB2021 <- read.csv(url2021)
+MLB2020 <- read.csv(url2020)
+MLB2019 <- read.csv(url2019)
+MLB2018 <- read.csv(url2018)
+MLB2017 <- read.csv(url2017)
+```
+
+```{r}
+MLBPitcher <- rbind(MLB2021, MLB2020, MLB2019, MLB2018, MLB2017)
+```
+
+```{r}
+sum(is.na(MLBPitcher))
+```
+
+```{r}
+summary(MLBPitcher)
+```
+
+```{r}
+boxplot(MLBPitcher[15:24], col = rainbow(14), main = "Box Plot of Pitcher Metrics", xlab = "Categories", ylab = "Scores")
+```
+
+```{r}
+MLBPitcher <- filter(MLBPitcher, !is.na(xba))
+MLBPitcher <- filter(MLBPitcher, spin_rate > 700)
+MLBPitcher <- select(MLBPitcher, -c(pos9_int_start_distance, pos8_int_start_distance, pos7_int_start_distance, pos6_int_start_distance, pos5_int_start_distance, pos4_int_start_distance, pos3_int_start_distance))
+```
+
+```{r}
+MLBPitcher_cor <- cor(MLBPitcher[15:24])
+corrplot(MLBPitcher_cor, type = "upper", order = 'hclust', tl.col = "blue")
+```
+
+```{r}
+ggplot(MLBPitcher) +
+  geom_smooth(aes(x = velocity, y = launch_speed, colour = "velocity"), method = "auto", level = 0.9) +   geom_smooth(aes(x = effective_speed, y = launch_speed, colour = "effective velocity"), method = "auto", level = 0.9) +
+  labs(title = "Velocities to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Velocities", y = "Exit Velocity", colour = "Velocities")
+```
+
+```{r}
+ggplot(MLBPitcher) +
+  geom_smooth(aes(x = spin_rate, y = launch_speed), method = "auto", level = 0.9, colour = "purple") +
+  labs(title = "Spin Rate to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Spin Rate", y = "Exit Velocity")
+```
+
+```{r}
+ggplot(MLBPitcher) +
+  geom_smooth(aes(x = release_extension, y = launch_speed), method = "auto", level = 0.9, colour = "Orange")
+labs(title = "Release Extensions to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Release Extension", y = "Exit Velocity")
+```
+
+```{r}
+set.seed(49831)
+PitchTrain <- sample(nrow(MLBPitcher), 0.80*nrow(MLBPitcher), replace = FALSE)
+Pitch_train <- MLBPitcher[PitchTrain,]
+Pitch_test <- MLBPitcher[-PitchTrain,]
+```
+
+```{r}
+PitchBaseModel <- rpart(launch_speed ~ ., data = Pitch_train, method = 'class')
+```
+
+```{r}
+baseImp <- varImp(model)
+baseImp
+
+baseImp <- as.data.frame(baseImp)
+ggplot(baseImp, aes(Overall, row.names(baseImp))) + 
+  geom_bar(stat = "identity", width = 0.1, fill = "black") + 
+  geom_point(shape = 21, size = 3, colour = "black", fill = "green", stroke = 2) + 
+  labs(title = "ERA Importance", x = "Importance", y = "Variable")
+```
+
+```{r}
+PitchNewModel <- rpart(launch_speed ~ velocity + effective_speed + release_extension + spin_rate, data = Pitch_train, method = 'class')
+```
+
+```{r}
+DeceptionTrain <- predict(PitchNewModel, Pitch_train, type = 'vector')
+DeceptionTest <- predict(PitchNewModel, Pitch_test, type = "vector")
+```
+
+```{r}
+Pitch_train <- cbind(Pitch_train, DeceptionTrain)
+Pitch_test <- cbind(Pitch_test, DeceptionTest)
+```
+
+```{r}
+names(Pitch_train)[names(Pitch_train) == "DeceptionTrain"] <- "DeceptionPred"
+names(Pitch_test)[names(Pitch_test) == "DeceptionTest"] <- "DeceptionPred"
+```
+
