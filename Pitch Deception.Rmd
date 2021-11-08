@@ -1,6 +1,8 @@
 ---
 title: "Pitcher Deception"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -19,10 +21,12 @@ require(dplyr)
 require(rpart)
 require(ggplot2)
 require(corrplot)
+require(caret)
 library(dplyr)
 library(rpart)
 library(ggplot2)
 library(corrplot)
+library(caret)
 ```
 
 ```{r}
@@ -31,6 +35,8 @@ url2020 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main
 url2019 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2019_MLB.csv"
 url2018 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2018_MLB.csv"
 url2017 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2017_MLB.csv"
+url2016 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2016_MLB.csv"
+url2015 <- "https://raw.githubusercontent.com/Chrisboatto/Pitcher-Deception/main/2015_MLB.csv"
 ```
 
 ```{r}
@@ -39,10 +45,12 @@ MLB2020 <- read.csv(url2020)
 MLB2019 <- read.csv(url2019)
 MLB2018 <- read.csv(url2018)
 MLB2017 <- read.csv(url2017)
+MLB2016 <- read.csv(url2016)
+MLB2015 <- read.csv(url2015)
 ```
 
 ```{r}
-MLBPitcher <- rbind(MLB2021, MLB2020, MLB2019, MLB2018, MLB2017)
+MLBPitcher <- rbind(MLB2021, MLB2020, MLB2019, MLB2018, MLB2017, MLB2016, MLB2015)
 ```
 
 ```{r}
@@ -58,69 +66,51 @@ boxplot(MLBPitcher[15:24], col = rainbow(14), main = "Box Plot of Pitcher Metric
 ```
 
 ```{r}
-MLBPitcher <- filter(MLBPitcher, !is.na(xba))
+MLBPitcher <- na.omit(MLBPitcher)
 MLBPitcher <- filter(MLBPitcher, spin_rate > 700)
+MLBPitcher <- filter(MLBPitcher, velocity > 65)
 MLBPitcher <- select(MLBPitcher, -c(pos9_int_start_distance, pos8_int_start_distance, pos7_int_start_distance, pos6_int_start_distance, pos5_int_start_distance, pos4_int_start_distance, pos3_int_start_distance))
+MLBPitcher <- mutate(MLBPitcher, 'EVBin' = case_when(launch_speed < 88.25 ~ 1, launch_speed >= 88.25 ~ 0))
 ```
 
 ```{r}
-MLBPitcher_cor <- cor(MLBPitcher[15:24])
+MLBPitcher_cor <- cor(MLBPitcher[15:25])
 corrplot(MLBPitcher_cor, type = "upper", order = 'hclust', tl.col = "blue")
 ```
 
 ```{r}
 ggplot(MLBPitcher) +
   geom_smooth(aes(x = velocity, y = launch_speed, colour = "velocity"), method = "auto", level = 0.9) +   geom_smooth(aes(x = effective_speed, y = launch_speed, colour = "effective velocity"), method = "auto", level = 0.9) +
-  labs(title = "Velocities to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Velocities", y = "Exit Velocity", colour = "Velocities")
+  labs(title = "Velocities to Exit Velocity Correlation", subtitle = "2015 - 2021 MLB Seasons", x = "Velocities", y = "Exit Velocity", colour = "Velocities")
 ```
 
 ```{r}
 ggplot(MLBPitcher) +
   geom_smooth(aes(x = spin_rate, y = launch_speed), method = "auto", level = 0.9, colour = "purple") +
-  labs(title = "Spin Rate to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Spin Rate", y = "Exit Velocity")
+  labs(title = "Spin Rate to Exit Velocity Correlation", subtitle = "2015 - 2021 MLB Seasons", x = "Spin Rate", y = "Exit Velocity")
 ```
 
 ```{r}
 ggplot(MLBPitcher) +
-  geom_smooth(aes(x = release_extension, y = launch_speed), method = "auto", level = 0.9, colour = "Orange")
-labs(title = "Release Extensions to Exit Velocity Correlation", subtitle = "2017 - 2021 MLB Seasons", x = "Release Extension", y = "Exit Velocity")
+  geom_smooth(aes(x = release_extension, y = launch_speed), method = "auto", level = 0.9, colour = "Orange") +
+labs(title = "Release Extensions to Exit Velocity Correlation", subtitle = "2015 - 2021 MLB Seasons", x = "Release Extension", y = "Exit Velocity")
 ```
 
 ```{r}
-set.seed(49831)
-PitchTrain <- sample(nrow(MLBPitcher), 0.80*nrow(MLBPitcher), replace = FALSE)
-Pitch_train <- MLBPitcher[PitchTrain,]
-Pitch_test <- MLBPitcher[-PitchTrain,]
+LinModel <- glm(EVBin ~ spin_rate + velocity + release_extension + eff_min_vel + effective_speed + total_pitches, data = MLBPitcher, family = 'binomial')
+summary(LinModel)
 ```
 
 ```{r}
-attach(MLBPitcher)
-PitchModel <- rpart(launch_speed ~ spin_rate + velocity + release_extension + eff_min_vel + effective_speed, data = Pitch_train, method = 'class')
+DeceptionPred <- predict(LinModel, MLBPitcher)
 ```
 
 ```{r}
-baseImp <- varImp(PitchModel)
-baseImp
-
-baseImp <- as.data.frame(baseImp)
-ggplot(baseImp, aes(Overall, row.names(baseImp))) + 
-  geom_bar(stat = "identity", width = 0.1, fill = "black") + 
-  geom_point(shape = 21, size = 3, colour = "black", fill = "green", stroke = 2) + 
-  labs(title = "Deception Importance", x = "Importance", y = "Variable")
+MLBPitcher <- cbind(MLBPitcher, DeceptionPred)
 ```
 
 ```{r}
-DeceptionTrain <- predict(PitchModel, Pitch_train, type = 'vector')
-DeceptionTest <- predict(PitchModel, Pitch_test, type = "vector")
-```
+MLBPitcher_full <- select(MLBPitcher, c(player_name, launch_speed, EVBin, DeceptionPred, velocity, spin_rate, release_extension, effective_speed, eff_min_vel, total_pitches))
 
-```{r}
-Pitch_train <- cbind(Pitch_train, DeceptionTrain)
-Pitch_test <- cbind(Pitch_test, DeceptionTest)
+PitcherDeception <- as.data.frame(MLBPitcher_full[order(-MLBPitcher_full$DeceptionPred),])
 ```
-
-```{r}
-names(Pitch_train)[names(Pitch_train) == "DeceptionTrain"] <- "DeceptionPred"
-names(Pitch_test)[names(Pitch_test) == "DeceptionTest"] <- "DeceptionPred"
-```
-
